@@ -172,3 +172,7 @@ CORS(app)
 ```
 
 On this stage we should be able to see random numbers on screen.
+
+## Connection of two parts
+
+redis

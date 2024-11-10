@@ -1,79 +1,72 @@
-from flask import Flask, Response
-from flask_cors import CORS
 import cv2
 import mediapipe as mp
 import time
-import threading
-import queue
+from flask import Flask, Response
+from flask_cors import CORS
 
-app = Flask(__name__)
-CORS(app)
-
-# Hand tracking setup with mediapipe
+# app = Flask(__name__)
+# CORS(app)
+# OpenCV video capture
 cap = cv2.VideoCapture(0)
-mp_hands = mp.solutions.hands
-hands = mp_hands.Hands()
-mp_draw = mp.solutions.drawing_utils
 
-# Queue for sending hand landmark data to the Flask app
-data_queue = queue.Queue(maxsize=1)
+# Set up MediaPipe hand tracking
+mpHands = mp.solutions.hands
+hands = mpHands.Hands()
+mpDraw = mp.solutions.drawing_utils
 
+pTime = 0
+cTime = 0
 
-def hand_tracking():
-    print("Hand tracking thread started.")
-    while True:
-        success, img = cap.read()
-        if not success:
-            print("Failed to capture image from camera.")
-            break
+# def generate_hand_positions():
+#     global cap
+#     global mpHands
+#     global hands
+#     global mpDraw
+#     global pTime
+#     global cTime
 
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = hands.process(img_rgb)
+while True:
+    success, img = cap.read()
+    if not success:
+        continue
 
-        if results.multi_hand_landmarks:
-            for hand_landmarks in results.multi_hand_landmarks:
-                for id, lm in enumerate(hand_landmarks.landmark):
-                    h, w, c = img.shape
-                    cx, cy = int(lm.x * w), int(lm.y * h)
-                    if id == 4:  # Specific landmark for example (e.g., the tip of the thumb)
-                        print(f"Hand landmark detected at: ({cx}, {cy})")  # Debugging output
-                        if data_queue.full():
-                            data_queue.get()  # Remove old data if queue is full
-                        data_queue.put((cx, cy))  # Place the latest coordinates in the queue
-                        cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
+    imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = hands.process(imgRGB)
 
-                mp_draw.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+    hand_positions = []
 
-        # Show FPS
-        cv2.imshow("Hand Tracking", img)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+    if results.multi_hand_landmarks:
+        for handLms in results.multi_hand_landmarks:
+            for id, lm in enumerate(handLms.landmark):
+                h, w, c = img.shape
+                cx, cy = int(lm.x * w), int(lm.y * h)
+                if id == 4:  # Track the tip of the thumb
+                    hand_positions.append(f"{cx},{cy}")
+                    cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
 
-    cap.release()
-    cv2.destroyAllWindows()
+            mpDraw.draw_landmarks(img, handLms, mpHands.HAND_CONNECTIONS)
 
 
-def generate_hand_positions():
-    print("Starting SSE generator.")
-    while True:
-        try:
-            # Get the latest data from the queue, blocking until available
-            cx, cy = data_queue.get(timeout=1)
-            print(f"Sending data via SSE: cx={cx}, cy={cy}")  # Debugging output
-            yield f"data: {{\"cx\": {cx}, \"cy\": {cy}}}\n\n"
-        except queue.Empty:
-            print("No data in queue; retrying...")  # Debugging output
-            continue
+    # if hand_positions:
+    #     yield f"data: {','.join(hand_positions)}\n\n"
 
+    # FPS calculation for display
+    cTime = time.time()
+    fps = 1 / (cTime - pTime)
+    pTime = cTime
 
-@app.route('/hand-position')
-def stream_hand_position():
-    return Response(generate_hand_positions(), mimetype="text/event-stream")
+    cv2.putText(img, str(int(fps)), (10, 70), cv2.FONT_HERSHEY_PLAIN, 3,
+                (255, 0, 255), 3)
 
+    cv2.imshow("Image", img)
+    cv2.waitKey(1)
 
-if __name__ == "__main__":
-    # Start hand-tracking in a separate thread
-    threading.Thread(target=hand_tracking, daemon=True).start()
-    # Run Flask app
-    print("Starting Flask server.")
-    app.run(debug=True, threaded=True)
+# generate_hand_positions()
+
+# @app.route('/stream')
+# def stream_hand_positions():
+#     return Response(generate_hand_positions(), mimetype="text/event-stream")
+#
+#
+# if __name__ == "__main__":
+#     app.run(debug=True, threaded=True)

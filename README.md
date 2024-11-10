@@ -175,4 +175,40 @@ On this stage we should be able to see random numbers on screen.
 
 ## Connection of two parts
 
-redis
+```
+conda install redis
+```
+
+now run
+
+```bash
+python hand-to-redis.py
+```
+
+to debug
+
+```
+redis-cli
+```
+
+and
+
+```
+GET thumb_position
+```
+
+run
+
+```bash
+python redis-to-sse.py
+```
+
+to debug
+
+```
+curl -N http://127.0.0.1:5000/stream
+```
+
+start frontend and you will see
+
+![image](https://github.com/user-attachments/assets/2046912f-6800-4a44-b1dd-b686f45c9416)

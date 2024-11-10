@@ -4,68 +4,76 @@ import cv2
 import mediapipe as mp
 import time
 import threading
+import queue
 
 app = Flask(__name__)
 CORS(app)
 
-# Variables for hand-tracking
+# Hand tracking setup with mediapipe
 cap = cv2.VideoCapture(0)
-mpHands = mp.solutions.hands
-hands = mpHands.Hands()
-mpDraw = mp.solutions.drawing_utils
+mp_hands = mp.solutions.hands
+hands = mp_hands.Hands()
+mp_draw = mp.solutions.drawing_utils
 
-# Shared data for hand landmarks
-cx, cy = None, None
+# Queue for sending hand landmark data to the Flask app
+data_queue = queue.Queue(maxsize=1)
 
-# SSE generator function to stream hand landmark data
-def generate_hand_positions():
-    global cx, cy
-    while True:
-        print('generate', cx, cy)
-        if cx is not None and cy is not None:
-            yield f"data: {{\"cx\": {cx}, \"cy\": {cy}}}\n\n"
-        time.sleep(0.1)  # Adjust to control data emission rate
-
-@app.route('/hand-position')
-def stream_hand_position():
-    return Response(generate_hand_positions(), mimetype="text/event-stream")
 
 def hand_tracking():
-    global cx, cy
-    pTime = 0
+    print("Hand tracking thread started.")
     while True:
         success, img = cap.read()
         if not success:
+            print("Failed to capture image from camera.")
             break
-        imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = hands.process(imgRGB)
+
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = hands.process(img_rgb)
 
         if results.multi_hand_landmarks:
-            for handLms in results.multi_hand_landmarks:
-                for id, lm in enumerate(handLms.landmark):
+            for hand_landmarks in results.multi_hand_landmarks:
+                for id, lm in enumerate(hand_landmarks.landmark):
                     h, w, c = img.shape
-                    cx, cy = int(lm.x * w), int(lm.y * h)  # Update cx, cy with latest values
-                    print('update', cx, cy)
-                    if id == 4:  # Drawing circle on a specific landmark
+                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    if id == 4:  # Specific landmark for example (e.g., the tip of the thumb)
+                        print(f"Hand landmark detected at: ({cx}, {cy})")  # Debugging output
+                        if data_queue.full():
+                            data_queue.get()  # Remove old data if queue is full
+                        data_queue.put((cx, cy))  # Place the latest coordinates in the queue
                         cv2.circle(img, (cx, cy), 15, (255, 0, 255), cv2.FILLED)
-                mpDraw.draw_landmarks(img, handLms, mpHands.HAND_CONNECTIONS)
 
-        # FPS display
-        cTime = time.time()
-        fps = 1 / (cTime - pTime)
-        pTime = cTime
-        cv2.putText(img, str(int(fps)), (10, 70), cv2.FONT_HERSHEY_PLAIN, 3, (255, 0, 255), 3)
+                mp_draw.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
-        cv2.imshow("Image", img)
+        # Show FPS
+        cv2.imshow("Hand Tracking", img)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
 
-# Run Flask server and hand-tracking in separate threads
+
+def generate_hand_positions():
+    print("Starting SSE generator.")
+    while True:
+        try:
+            # Get the latest data from the queue, blocking until available
+            cx, cy = data_queue.get(timeout=1)
+            print(f"Sending data via SSE: cx={cx}, cy={cy}")  # Debugging output
+            yield f"data: {{\"cx\": {cx}, \"cy\": {cy}}}\n\n"
+        except queue.Empty:
+            print("No data in queue; retrying...")  # Debugging output
+            continue
+
+
+@app.route('/hand-position')
+def stream_hand_position():
+    return Response(generate_hand_positions(), mimetype="text/event-stream")
+
+
 if __name__ == "__main__":
     # Start hand-tracking in a separate thread
-    threading.Thread(target=hand_tracking).start()
+    threading.Thread(target=hand_tracking, daemon=True).start()
     # Run Flask app
+    print("Starting Flask server.")
     app.run(debug=True, threaded=True)

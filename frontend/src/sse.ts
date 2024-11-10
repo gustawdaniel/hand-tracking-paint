@@ -6,17 +6,26 @@ export function setupSSEReceiver(element: HTMLElement, canvas: HTMLCanvasElement
   // Get the canvas context
   const ctx = canvas.getContext('2d')!
 
+  // Store previously drawn circles to avoid clearing the entire canvas
+  let circles: { cx: number, cy: number }[] = []
+
   // Function to draw the thumb position
   function drawThumbPosition(cx: number, cy: number) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height) // Clear the canvas before drawing
+    // Clear only the area of the last gray circle
+    if (lastPosition) {
+      ctx.clearRect(lastPosition.cx - 5, lastPosition.cy - 5, 10, 10) // Clear the old circle area
+    }
 
-    // Draw thumb position as a gray circle when space is not pressed
+    // Draw gray circle to represent thumb position
     ctx.fillStyle = drawLines ? 'black' : 'gray'
     ctx.beginPath()
     ctx.arc(cx, cy, 5, 0, Math.PI * 2)
     ctx.fill()
 
-    // Draw black lines if space is pressed
+    // Save this circle's position
+    circles.push({ cx, cy })
+
+    // Draw persistent black lines if space is pressed
     if (lastPosition && drawLines) {
       ctx.beginPath()
       ctx.moveTo(lastPosition.cx, lastPosition.cy)

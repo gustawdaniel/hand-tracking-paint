@@ -22,7 +22,7 @@ Learn more about them
 - [opencv](https://docs.opencv.org/4.x/d1/dfb/intro.html)
 - [mediapipe](https://ai.google.dev/edge/mediapipe/solutions/guide)
 
-Add backed code to detect hands
+Add backed code to detect hands `hands-tracking.py`
 
 ```python
 import cv2
@@ -124,7 +124,7 @@ pnpm i && pnpm dev
 
 Fronted will be available on `http://localhost:5173/`
 
-If we just connect by
+If we just connect by `sse.ts`
 
 ```ts
 export function setupSSEReceiver(element: HTMLElement) {
@@ -135,8 +135,40 @@ export function setupSSEReceiver(element: HTMLElement) {
 }
 ```
 
+and `main.ts`
+
+```ts
+import './style.css'
+import { setupSSEReceiver } from './sse.ts'
+
+document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  <div>
+     <p id="sse"></p>
+  </div>
+`
+
+setupSSEReceiver(document.querySelector<HTMLElement>('#sse')!)
+```
+
 we will see CORS problem
 
 ```
 Cross-Origin Request Blocked: The Same Origin Policy disallows reading the remote resource at http://127.0.0.1:5000/numbers. (Reason: CORS header ‘Access-Control-Allow-Origin’ missing). Status code: 200.
 ```
+
+We can fix by.:
+
+```bash
+conda install Flask-CORS
+```
+
+and lines in `sse.py`
+
+```python
+from flask_cors import CORS
+
+app = Flask(__name__)
+CORS(app) 
+```
+
+On this stage we should be able to see random numbers on screen.

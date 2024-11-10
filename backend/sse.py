@@ -1,8 +1,10 @@
 from flask import Flask, Response
 import random
 import time
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 def generate_random_numbers():
     while True:
